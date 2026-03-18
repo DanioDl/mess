@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Mini Messenger</title>
+  <style>
+    /* --- Основной стиль --- */
+    body {
+      font-family: "Segoe UI", Arial, sans-serif;
+      background: #f5f6fa;
+      margin: 0;
+      display: flex;
+      justify-content: center;
+    }
+
+    #app {
+      display: flex;
+      width: 800px;
+      margin-top: 50px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+      border-radius: 10px;
+      overflow: hidden;
+      background: white;
+      height: 600px;
+    }
+
+    /* --- Сайдбар --- */
+    #sidebar {
+      width: 220px;
+      background: #2f3640;
+      color: white;
+      padding: 15px;
+      box-sizing: border-box;
+    }
+
+    #sidebar h3 {
+      margin-top: 0;
+      font-size: 16px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    #users {
+      list-style: none;
+      padding: 0;
+      margin: 10px 0 0 0;
+    }
+
+    #users li {
+      padding: 5px 0;
+      font-size: 14px;
+    }
+
+    /* --- Контейнер чата --- */
+    #chat-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 15px;
+      box-sizing: border-box;
+      background: #f0f2f5;
+    }
+
+    #chat-header {
+      font-weight: bold;
+      font-size: 18px;
+      margin-bottom: 10px;
+    }
+
+    #messages {
+      flex: 1;
+      list-style: none;
+      padding: 0;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .message-row {
+      display: flex;
+      align-items: flex-end;
+      gap: 10px;
+    }
+
+    .me {
+      justify-content: flex-end;
+    }
+
+    .other {
+      justify-content: flex-start;
+    }
+
+    .avatar {
+      width: 35px;
+      height: 35px;
+      border-radius: 50%;
+      background: #40739e;
+      color: white;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-weight: bold;
+      flex-shrink: 0;
+    }
+
+    .msg-bubble {
+      padding: 10px 15px;
+      border-radius: 20px;
+      max-width: 60%;
+      word-wrap: break-word;
+      font-size: 14px;
+    }
+
+    .msg-bubble.me {
+      background: #4cd137;
+      color: white;
+    }
+
+    .msg-bubble.other {
+      background: #dcdde1;
+      color: black;
+    }
+
+    input {
+      padding: 10px;
+      flex: 1;
+      border: 1px solid #dcdde1;
+      border-radius: 20px;
+      outline: none;
+    }
+
+    button {
+      padding: 10px 15px;
+      margin-left: 10px;
+      border-radius: 20px;
+      border: none;
+      background: #40739e;
+      color: white;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    button:hover {
+      background: #487eb0;
+    }
+
+    #input-container {
+      display: flex;
+      align-items: center;
+    }
+
+    #typing-indicator {
+      font-size: 12px;
+      color: #555;
+      margin-bottom: 5px;
+      height: 18px;
+    }
+
+    #auth input {
+      padding: 10px;
+      margin-bottom: 10px;
+      border-radius: 20px;
+      border: 1px solid #dcdde1;
+      width: calc(100% - 20px);
+      outline: none;
+    }
+
+    #auth button {
+      border-radius: 20px;
+      border: none;
+      padding: 10px 15px;
+      cursor: pointer;
+      margin-bottom: 10px;
+      background: #40739e;
+      color: white;
+      width: 100%;
+    }
+
+    #auth button:hover {
+      background: #487eb0;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="sidebar">
+      <h3>🟢 Онлайн</h3>
+      <ul id="users"></ul>
+    </div>
+
+    <div id="chat-container">
+      <div id="chat-header"></div>
+      <div id="typing-indicator"></div>
+
+      <!-- Регистрация и логин -->
+      <div id="auth">
+        <input id="regUser" placeholder="Логин">
+        <input id="regPass" placeholder="Пароль" type="password">
+        <button onclick="register()">Зарегистрироваться</button>
+
+        <input id="logUser" placeholder="Логин">
+        <input id="logPass" placeholder="Пароль" type="password">
+        <button onclick="login()">Войти</button>
+      </div>
+
+      <!-- Чат -->
+      <div id="chat" style="display:none; flex-direction: column; height: 100%;">
+        <ul id="messages"></ul>
+        <div id="input-container">
+          <input id="msg" placeholder="Введите сообщение" oninput="typing()">
+          <button onclick="sendMessage()">Отправить</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+  <script>
+    const socket = io("http://localhost:3000");
+    let username = "";
+    let typingTimeout;
+
+    async function register() {
+      const u = document.getElementById("regUser").value;
+      const p = document.getElementById("regPass").value;
+      if (!u || !p) return alert("Введите логин и пароль");
+
+      const res = await fetch("http://localhost:3000/register", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ username: u, password: p })
+      });
+
+      const data = await res.json();
+      alert(data.success ? "Регистрация успешна!" : data.message);
+    }
+
+    async function login() {
+      const u = document.getElementById("logUser").value;
+      const p = document.getElementById("logPass").value;
+      if (!u || !p) return alert("Введите логин и пароль");
+
+      const res = await fetch("http://localhost:3000/login", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ username: u, password: p })
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        username = u;
+        document.getElementById("auth").style.display = "none";
+        document.getElementById("chat").style.display = "flex";
+        document.getElementById("chat-header").textContent = "Привет, " + username;
+        socket.emit("join", username);
+      } else {
+        alert(data.message || "Ошибка входа");
+      }
+    }
+
+    function sendMessage() {
+      const input = document.getElementById("msg");
+      const text = input.value;
+      if (!text) return;
+
+      const data = { user: username, text };
+      socket.emit("send-message", data);
+      addMessage(data, "me");
+      input.value = "";
+      socket.emit("stop-typing");
+    }
+
+    function typing() {
+      socket.emit("typing");
+      clearTimeout(typingTimeout);
+      typingTimeout = setTimeout(() => {
+        socket.emit("stop-typing");
+      }, 1000);
+    }
+
+    socket.on("receive-message", data => {
+      if (data.user !== username) addMessage(data, "other");
+    });
+
+    socket.on("load-messages", msgs => msgs.forEach(m => addMessage(m, m.user === username ? "me" : "other")));
+
+    socket.on("users", users => {
+      const ul = document.getElementById("users");
+      ul.innerHTML = "";
+      users.forEach(u => {
+        const li = document.createElement("li");
+        li.textContent = u;
+        ul.appendChild(li);
+      });
+    });
+
+    // Индикатор печатает
+    socket.on("typing", user => {
+      if (user !== username) {
+        document.getElementById("typing-indicator").textContent = `${user} печатает...`;
+      }
+    });
+
+    socket.on("stop-typing", user => {
+      if (user !== username) {
+        document.getElementById("typing-indicator").textContent = "";
+      }
+    });
+
+    function addMessage(data, type) {
+      const li = document.createElement("li");
+      const row = document.createElement("div");
+      row.classList.add("message-row", type);
+
+      // аватар
+      const avatar = document.createElement("div");
+      avatar.classList.add("avatar");
+      avatar.textContent = data.user[0].toUpperCase();
+
+      // сообщение
+      const bubble = document.createElement("div");
+      bubble.classList.add("msg-bubble", type);
+      bubble.textContent = data.text;
+
+      if(type === "me") {
+        row.appendChild(bubble);
+        row.appendChild(avatar);
+      } else {
+        row.appendChild(avatar);
+        row.appendChild(bubble);
+      }
+
+      row.appendChild(li);
+      const messages = document.getElementById("messages");
+      messages.appendChild(row);
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    // передаём событие печатает на сервер
+    document.getElementById("msg").addEventListener("input", typing);
+  </script>
+</body>
+</html>
